@@ -43,12 +43,13 @@ export function createSyncRouter(db: Database): Router {
     return res.json({
       pending_count: pendingCount,
       last_sync: lastSync,
-      connectivity,
+      is_online: connectivity,
+      sync_queue_size: pendingCount
     });
   });
 
   // Batch sync endpoint (for server-side)
- router.post('/batch', async (req: Request, res: Response) => {
+router.post('/batch', async (req: Request, res: Response) => {
   try {
     const items: SyncQueueItem[] = req.body?.items;
     if (!items || !Array.isArray(items)) {
@@ -59,19 +60,60 @@ export function createSyncRouter(db: Database): Router {
 
     for (const item of items) {
       try {
+        let serverId: string | null = null;
+        let resolvedData: any = null;
+
         if (item.operation === 'create') {
+          // Generate a server ID if not provided
+          serverId = item.data.server_id || `srv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
           await db.run(
-            `INSERT INTO tasks (id, title, description, completed, updated_at, sync_status, server_id, last_synced_at)
-             VALUES (?, ?, ?, ?, datetime('now'), 'synced', ?, datetime('now'))`,
+            `INSERT INTO tasks (id, title, description, completed, created_at, updated_at, sync_status, server_id, last_synced_at)
+             VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 'synced', ?, datetime('now'))`,
             [
               item.data.id,
               item.data.title,
               item.data.description || null,
               item.data.completed ? 1 : 0,
-              item.data.server_id || null,
+              serverId,
             ]
           );
+
+          // Get the complete task data to return as resolved_data
+          const createdTask = await db.get<{
+            id: string;
+            server_id: string;
+            title: string;
+            description: string | null;
+            completed: number;
+            created_at: string;
+            updated_at: string;
+          }>(
+            `SELECT id, server_id, title, description, completed, created_at, updated_at 
+             FROM tasks WHERE id = ?`,
+            [item.data.id]
+          );
+
+          if (createdTask) {
+            resolvedData = {
+              id: createdTask.server_id, // Return server_id as the main ID
+              title: createdTask.title,
+              description: createdTask.description,
+              completed: Boolean(createdTask.completed),
+              created_at: createdTask.created_at,
+              updated_at: createdTask.updated_at
+            };
+          }
+
         } else if (item.operation === 'update') {
+          // Get the current server_id before updating
+          const existingTask = await db.get<{ server_id: string }>(
+            `SELECT server_id FROM tasks WHERE id = ?`,
+            [item.task_id]
+          );
+          
+          serverId = existingTask?.server_id || null;
+
           await db.run(
             `UPDATE tasks
              SET title = ?, description = ?, completed = ?, updated_at = datetime('now'),
@@ -84,7 +126,41 @@ export function createSyncRouter(db: Database): Router {
               item.task_id,
             ]
           );
+
+          // Get the updated task data
+          const updatedTask = await db.get<{
+            server_id: string;
+            title: string;
+            description: string | null;
+            completed: number;
+            created_at: string;
+            updated_at: string;
+          }>(
+            `SELECT server_id, title, description, completed, created_at, updated_at 
+             FROM tasks WHERE id = ?`,
+            [item.task_id]
+          );
+
+          if (updatedTask) {
+            resolvedData = {
+              id: updatedTask.server_id,
+              title: updatedTask.title,
+              description: updatedTask.description,
+              completed: Boolean(updatedTask.completed),
+              created_at: updatedTask.created_at,
+              updated_at: updatedTask.updated_at
+            };
+          }
+
         } else if (item.operation === 'delete') {
+          // Get the server_id before marking as deleted
+          const existingTask = await db.get<{ server_id: string }>(
+            `SELECT server_id FROM tasks WHERE id = ?`,
+            [item.task_id]
+          );
+          
+          serverId = existingTask?.server_id || null;
+
           await db.run(
             `UPDATE tasks
              SET is_deleted = 1, updated_at = datetime('now'),
@@ -92,16 +168,20 @@ export function createSyncRouter(db: Database): Router {
              WHERE id = ?`,
             [item.task_id]
           );
+
+          resolvedData = { id: serverId, deleted: true };
         }
 
         processed_items.push({
-          client_id: item.id, // <-- matches SyncService
-          server_id: item.data?.server_id || '',
+          client_id: item.task_id,
+          server_id: serverId || '',
           status: 'success',
+          resolved_data: resolvedData || item.data
         });
+
       } catch (err: unknown) {
         processed_items.push({
-          client_id: item.id,
+          client_id: item.task_id,
           status: 'error',
           error: err instanceof Error ? err.message : String(err),
           server_id: ''

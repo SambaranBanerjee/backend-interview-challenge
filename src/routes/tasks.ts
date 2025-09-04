@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { TaskService } from '../services/taskService';
-import { createTaskSchema, updateTaskSchema } from '@/validation/taskSchema';
+import { createTaskSchema, updateTaskSchema } from '../validation/taskSchema';
 import { SyncService } from '../services/syncService';
 import { Database } from '../db/database';
 import { validate } from '../middleware/validate';
