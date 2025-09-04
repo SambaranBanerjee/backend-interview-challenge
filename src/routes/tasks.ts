@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { TaskService } from '../services/taskService';
+import { createTaskSchema, updateTaskSchema } from '@/validation/taskSchema';
 import { SyncService } from '../services/syncService';
 import { Database } from '../db/database';
+import { validate } from '../middleware/validate';
 
 export function createTaskRouter(db: Database): Router {
   const router = Router();
@@ -37,11 +39,8 @@ export function createTaskRouter(db: Database): Router {
   });
 
   // Create task
-  router.post('/', async (req: Request, res: Response) => {
+  router.post('/', validate(createTaskSchema), async (req: Request, res: Response) => {
     const { title, description } = req.body;
-    if(!title) {
-      return res.status(400).json({ error: 'Title is required' });
-    }
     try {
       const newTask = await taskService.createTask({ title, description });
       await syncService.addToSyncQueue(newTask.id, 'create', newTask);
@@ -53,13 +52,10 @@ export function createTaskRouter(db: Database): Router {
   });
 
   // Update task
-  router.put('/:id', async (req: Request, res: Response) => {
-    const { title, description } = req.body;
-    if (!title) {
-      return res.status(400).json({ error: 'Title is required' });
-    }
+  router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Response) => {
+    const { title, description, completed } = req.body;
     try {
-      const updatedTask = await taskService.updateTask(req.params.id, { title, description });
+      const updatedTask = await taskService.updateTask(req.params.id, { title, description, completed });
       if (!updatedTask) {
         return res.status(404).json({ error: 'Task not found' });
       }
