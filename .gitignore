@@ -15,3 +15,4 @@ coverage/
 *.sqlite3
 *.db
 .vitest-result.json
+.early.coverage
