@@ -14,6 +14,12 @@ export function createTaskRouter(db: Database): Router {
   router.get('/', async (_req: Request, res: Response) => {
     try {
       const tasks = await taskService.getAllTasks();
+      if (!tasks || tasks.length === 0) {
+        return res.status(404).json({ error: 'No task found',
+          timestamp: new Date().toISOString(),
+          path: "/api/tasks"
+         });
+      }
       return res.json(tasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);

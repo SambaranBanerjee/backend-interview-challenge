@@ -64,7 +64,6 @@ router.post('/batch', async (req: Request, res: Response) => {
         let resolvedData: any = null;
 
         if (item.operation === 'create') {
-          // Generate a server ID if not provided
           serverId = item.data.server_id || `srv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
           await db.run(
