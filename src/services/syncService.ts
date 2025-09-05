@@ -182,7 +182,7 @@ export class SyncService {
   }
 
   private async handleSyncError(item: SyncQueueItem, error: Error): Promise<void> {
-    const maxRetries = parseInt(process.env.MAX_RETRY_COUNT || '5', 10);
+    const maxRetries = parseInt(process.env.MAX_RETRY_COUNT || '3', 10);
     const newRetryCount = item.retry_count + 1;
     const errorMessage = error.message;
 

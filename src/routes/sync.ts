@@ -78,7 +78,6 @@ router.post('/batch', async (req: Request, res: Response) => {
             ]
           );
 
-          // Get the complete task data to return as resolved_data
           const createdTask = await db.get<{
             id: string;
             server_id: string;
@@ -95,7 +94,7 @@ router.post('/batch', async (req: Request, res: Response) => {
 
           if (createdTask) {
             resolvedData = {
-              id: createdTask.server_id, // Return server_id as the main ID
+              id: createdTask.server_id,
               title: createdTask.title,
               description: createdTask.description,
               completed: Boolean(createdTask.completed),
